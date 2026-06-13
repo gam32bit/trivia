@@ -27,6 +27,16 @@ function render(html) {
   el("app").innerHTML = html;
 }
 
+// Outcome of a completed match from `meId`'s perspective. The winner relation is
+// authoritative (set server-side by the scoring hook); empty winner on a
+// complete match means a tie.
+function outcomeFor(match, meId) {
+  if (match.status === "forfeit" && !match.winner) return { label: "Forfeit", cls: "tie" };
+  if (match.winner === meId) return { label: "Won", cls: "win" };
+  if (match.winner) return { label: "Lost", cls: "loss" };
+  return { label: "Tied", cls: "tie" };
+}
+
 // ---------- views ----------
 
 function showLogin(errorMsg) {
@@ -64,7 +74,8 @@ async function showDashboard() {
   tomorrow.setDate(tomorrow.getDate() + 1);
   const tomorrowStr = tomorrow.toISOString().slice(0, 10);
 
-  let match, myAnswerCount;
+  // --- Today's match ---
+  let match = null;
   try {
     const result = await pb.collection("matches").getList(1, 1, {
       filter: `match_date >= "${today} 00:00:00.000Z" && match_date < "${tomorrowStr} 00:00:00.000Z"`,
@@ -75,66 +86,92 @@ async function showDashboard() {
     match = null;
   }
 
+  let todayBlock;
   if (!match) {
-    render(`
-      <div class="card dashboard">
-        <header>
-          <span class="greeting">Hi, ${me.display_name}</span>
-          <button class="link-btn" id="logout-btn">Sign out</button>
-        </header>
-        <p class="no-match">No match scheduled for today.</p>
-      </div>
-    `);
-    el("logout-btn").addEventListener("click", () => { pb.authStore.clear(); showLogin(); });
-    return;
-  }
-
-  // Who is the opponent?
-  const isA = match.player_a === me.id;
-  const opponentRecord = isA ? match.expand?.player_b : match.expand?.player_a;
-  const opponentName = opponentRecord?.display_name ?? "Opponent";
-
-  // Count my submitted answers for this match
-  try {
-    const ans = await pb.collection("answers").getList(1, 10, {
-      filter: `match = "${match.id}" && player = "${me.id}"`,
-      fields: "id",
-    });
-    myAnswerCount = ans.totalItems;
-  } catch {
-    myAnswerCount = 0;
-  }
-
-  const iSubmitted = myAnswerCount >= 3;
-  const status = match.status;
-
-  let statusBlock;
-  if (status === "complete" || status === "forfeit") {
-    statusBlock = `<p class="status-msg complete">Match complete — results coming in Phase 3.</p>`;
-  } else if (iSubmitted) {
-    statusBlock = `<p class="status-msg waiting">Waiting on ${opponentName}…</p>`;
+    todayBlock = `<p class="no-match">No match scheduled for today.</p>`;
   } else {
-    statusBlock = `<button class="play-btn" id="play-btn">Play today's match</button>`;
+    const isA = match.player_a === me.id;
+    const opponentName = (isA ? match.expand?.player_b : match.expand?.player_a)?.display_name ?? "Opponent";
+
+    let myAnswerCount = 0;
+    try {
+      const ans = await pb.collection("answers").getList(1, 10, {
+        filter: `match = "${match.id}" && player = "${me.id}"`,
+        fields: "id",
+      });
+      myAnswerCount = ans.totalItems;
+    } catch {
+      myAnswerCount = 0;
+    }
+    const iSubmitted = myAnswerCount >= 3;
+    const status = match.status;
+
+    let statusBlock;
+    if (status === "complete" || status === "forfeit") {
+      statusBlock = `<button class="play-btn" id="results-btn">See results</button>`;
+    } else if (iSubmitted) {
+      statusBlock = `<p class="status-msg waiting">Waiting on ${opponentName}…</p>`;
+    } else {
+      statusBlock = `<button class="play-btn" id="play-btn">Play today's match</button>`;
+    }
+
+    todayBlock = `
+      <div class="match-summary">
+        <div class="vs-line">vs. <strong>${opponentName}</strong></div>
+        <div class="match-meta">Season ${match.season} · Round ${match.round}</div>
+      </div>
+      ${statusBlock}`;
   }
+
+  // --- Recent results (my completed matches) ---
+  let recent = [];
+  try {
+    const r = await pb.collection("matches").getList(1, 10, {
+      filter: `(status = "complete" || status = "forfeit") && (player_a = "${me.id}" || player_b = "${me.id}")`,
+      sort: "-match_date",
+      expand: "player_a,player_b",
+    });
+    recent = r.items;
+  } catch {
+    recent = [];
+  }
+
+  const recentHtml = recent.length ? `
+    <div class="recent">
+      <h2>Recent results</h2>
+      <ul class="recent-list">
+        ${recent.map((m) => {
+          const opp = (m.player_a === me.id ? m.expand?.player_b : m.expand?.player_a)?.display_name ?? "Opponent";
+          const oc = outcomeFor(m, me.id);
+          return `<li class="recent-item" data-match="${m.id}">
+            <span class="recent-opp">vs ${opp}</span>
+            <span class="outcome ${oc.cls}">${oc.label}</span>
+          </li>`;
+        }).join("")}
+      </ul>
+    </div>` : "";
 
   render(`
     <div class="card dashboard">
       <header>
         <span class="greeting">Hi, ${me.display_name}</span>
-        <button class="link-btn" id="logout-btn">Sign out</button>
+        <nav class="nav-actions">
+          <button class="link-btn" id="leaderboard-btn">Leaderboard</button>
+          <button class="link-btn" id="logout-btn">Sign out</button>
+        </nav>
       </header>
-      <div class="match-summary">
-        <div class="vs-line">vs. <strong>${opponentName}</strong></div>
-        <div class="match-meta">Season ${match.season} · Round ${match.round}</div>
-      </div>
-      ${statusBlock}
+      ${todayBlock}
+      ${recentHtml}
     </div>
   `);
 
   el("logout-btn").addEventListener("click", () => { pb.authStore.clear(); showLogin(); });
-  if (!iSubmitted && status !== "complete" && status !== "forfeit") {
-    el("play-btn").addEventListener("click", () => showPlay(match));
-  }
+  el("leaderboard-btn").addEventListener("click", () => showLeaderboard());
+  if (el("play-btn")) el("play-btn").addEventListener("click", () => showPlay(match));
+  if (el("results-btn")) el("results-btn").addEventListener("click", () => showResults(match.id));
+  document.querySelectorAll(".recent-item").forEach((li) => {
+    li.addEventListener("click", () => showResults(li.dataset.match));
+  });
 }
 
 async function showPlay(match) {
@@ -213,9 +250,18 @@ async function showPlay(match) {
         const opponentDoneName = me.id === match.player_a
           ? match.expand?.player_b?.display_name
           : match.expand?.player_a?.display_name;
+
+        // Refetch match to see if the opponent already finished
+        let freshMatch = match;
+        try { freshMatch = await pb.collection("matches").getOne(match.id); } catch {}
+        const matchDone = freshMatch.status === "complete" || freshMatch.status === "forfeit";
+
         render(`
           <div class="card">
-            <p class="done-msg">All done! Waiting for ${opponentDoneName ?? "opponent"} to finish.</p>
+            <p class="done-msg">${matchDone
+              ? "Match complete! Both players have submitted."
+              : `All done! Waiting for ${opponentDoneName ?? "opponent"} to finish.`
+            }</p>
             <button id="dash-btn" class="play-btn">Back to dashboard</button>
           </div>
         `);
@@ -225,6 +271,148 @@ async function showPlay(match) {
   }
 
   renderQuestion();
+}
+
+async function showResults(matchId) {
+  render(`<div class="card"><p class="loading">Loading results…</p></div>`);
+  const me = pb.authStore.model;
+
+  let match;
+  try {
+    match = await pb.collection("matches").getOne(matchId, { expand: "player_a,player_b" });
+  } catch {
+    render(`<div class="card"><p class="error">Couldn't load that match.</p><button class="play-btn" id="back-btn">Back</button></div>`);
+    el("back-btn").addEventListener("click", showDashboard);
+    return;
+  }
+
+  let answers = [];
+  try {
+    answers = await pb.collection("answers").getFullList({
+      filter: `match = "${matchId}"`,
+      expand: "question,player",
+    });
+  } catch {
+    answers = [];
+  }
+
+  const isA = match.player_a === me.id;
+  const oppName = (isA ? match.expand?.player_b : match.expand?.player_a)?.display_name ?? "Opponent";
+
+  // Group answers by question, splitting mine vs. opponent's.
+  const byQuestion = {};
+  let myScore = 0, oppScore = 0;
+  for (const a of answers) {
+    const cell = (byQuestion[a.question] = byQuestion[a.question] || {});
+    cell.q = a.expand?.question;
+    if (a.player === me.id) { cell.mine = a; if (a.is_correct) myScore++; }
+    else { cell.theirs = a; if (a.is_correct) oppScore++; }
+  }
+
+  const order = match.questions && match.questions.length ? match.questions : Object.keys(byQuestion);
+  const oc = outcomeFor(match, me.id);
+
+  const answerRow = (label, a) => {
+    if (!a) return `<div class="ans-row"><span class="ans-who">${label}</span><span class="ans-resp muted">— no answer —</span></div>`;
+    return `<div class="ans-row ${a.is_correct ? "ok" : "no"}">
+      <span class="ans-who">${label}</span>
+      <span class="ans-resp">${decodeEntities(a.response)}</span>
+      <span class="mark">${a.is_correct ? "✓" : "✗"}</span>
+    </div>`;
+  };
+
+  const rows = order.map((qid, i) => {
+    const cell = byQuestion[qid] || {};
+    const q = cell.q;
+    const qText = q ? decodeEntities(q.text) : "(question unavailable)";
+    const correct = q ? decodeEntities(q.correct_answer) : "";
+    return `
+      <div class="result-q">
+        <div class="rq-text"><span class="rq-num">Q${i + 1}</span>${qText}</div>
+        ${answerRow("You", cell.mine)}
+        ${answerRow(oppName, cell.theirs)}
+        ${correct ? `<div class="rq-correct">Answer: <strong>${correct}</strong></div>` : ""}
+      </div>`;
+  }).join("");
+
+  const headline = oc.label === "Won" ? "You won 🏆"
+    : oc.label === "Lost" ? "You lost"
+    : oc.label === "Tied" ? "Tie game"
+    : oc.label;
+
+  render(`
+    <div class="card results">
+      <header>
+        <button class="link-btn" id="back-btn">← Back</button>
+        <span class="match-meta">Season ${match.season} · Round ${match.round}</span>
+      </header>
+      <div class="result-banner ${oc.cls}">
+        <div class="rb-outcome">${headline}</div>
+        <div class="rb-score">You ${myScore} — ${oppName} ${oppScore}</div>
+      </div>
+      <div class="result-list">${rows}</div>
+    </div>
+  `);
+  el("back-btn").addEventListener("click", showDashboard);
+}
+
+async function showLeaderboard() {
+  render(`<div class="card"><p class="loading">Loading leaderboard…</p></div>`);
+  const me = pb.authStore.model;
+
+  // Current season = the season of my most recent match.
+  let season = 1;
+  try {
+    const r = await pb.collection("matches").getList(1, 1, { sort: "-match_date,-season", fields: "season" });
+    if (r.items[0]) season = r.items[0].season;
+  } catch {}
+
+  let standings = [], users = [];
+  try {
+    standings = await pb.collection("standings").getFullList({ filter: `season = ${season}` });
+  } catch {}
+  try {
+    users = await pb.collection("users").getFullList({ fields: "id,display_name" });
+  } catch {}
+
+  const byPlayer = {};
+  for (const s of standings) byPlayer[s.player] = s;
+
+  // Left-join users with standings so players with no completed match still show.
+  const rows = users.map((u) => {
+    const s = byPlayer[u.id] || {};
+    return {
+      id: u.id,
+      name: u.display_name,
+      wins: s.wins || 0, ties: s.ties || 0, losses: s.losses || 0, points: s.points || 0,
+    };
+  });
+  rows.sort((a, b) => b.points - a.points || b.wins - a.wins || a.name.localeCompare(b.name));
+
+  const body = rows.map((r, i) => `
+    <tr class="${r.id === me.id ? "me" : ""}">
+      <td class="rank">${i + 1}</td>
+      <td class="lb-name">${r.name}</td>
+      <td>${r.wins}</td>
+      <td>${r.ties}</td>
+      <td>${r.losses}</td>
+      <td class="lb-pts">${r.points}</td>
+    </tr>`).join("");
+
+  render(`
+    <div class="card leaderboard">
+      <header>
+        <button class="link-btn" id="back-btn">← Back</button>
+        <span class="match-meta">Season ${season}</span>
+      </header>
+      <h1>Leaderboard</h1>
+      <table class="lb-table">
+        <thead><tr><th>#</th><th>Player</th><th>W</th><th>T</th><th>L</th><th>Pts</th></tr></thead>
+        <tbody>${body}</tbody>
+      </table>
+    </div>
+  `);
+  el("back-btn").addEventListener("click", showDashboard);
 }
 
 // ---------- boot ----------
