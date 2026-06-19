@@ -356,29 +356,37 @@ async function showResults(matchId) {
   el("back-btn").addEventListener("click", showDashboard);
 }
 
-async function showLeaderboard() {
+async function showLeaderboard(season) {
   render(`<div class="card"><p class="loading">Loading leaderboard…</p></div>`);
   const me = pb.authStore.model;
 
-  // Current season = the season of my most recent match.
-  let season = 1;
+  // Derive all seasons that have matches (deduplicate client-side).
+  let allSeasons = [];
   try {
-    const r = await pb.collection("matches").getList(1, 1, { sort: "-match_date,-season", fields: "season" });
-    if (r.items[0]) season = r.items[0].season;
+    const r = await pb.collection("matches").getFullList({ fields: "season", sort: "season" });
+    allSeasons = [...new Set(r.map(m => m.season))].sort((a, b) => a - b);
   } catch {}
 
-  let standings = [], users = [];
-  try {
-    standings = await pb.collection("standings").getFullList({ filter: `season = ${season}` });
-  } catch {}
-  try {
-    users = await pb.collection("users").getFullList({ fields: "id,display_name" });
-  } catch {}
+  if (season == null) {
+    season = allSeasons.length ? allSeasons[allSeasons.length - 1] : 1;
+  }
 
+  let standings = [], users = [], seasonMatches = [];
+  await Promise.all([
+    pb.collection("standings").getFullList({ filter: `season = ${season}` })
+      .then(r => { standings = r; }).catch(() => {}),
+    pb.collection("users").getFullList({ fields: "id,display_name" })
+      .then(r => { users = r; }).catch(() => {}),
+    pb.collection("matches").getFullList({
+      filter: `season = ${season}`,
+      sort: "round,player_a",
+      expand: "player_a,player_b",
+    }).then(r => { seasonMatches = r; }).catch(() => {}),
+  ]);
+
+  // Standings table
   const byPlayer = {};
   for (const s of standings) byPlayer[s.player] = s;
-
-  // Left-join users with standings so players with no completed match still show.
   const rows = users.map((u) => {
     const s = byPlayer[u.id] || {};
     return {
@@ -389,7 +397,7 @@ async function showLeaderboard() {
   });
   rows.sort((a, b) => b.points - a.points || b.wins - a.wins || a.name.localeCompare(b.name));
 
-  const body = rows.map((r, i) => `
+  const lbBody = rows.map((r, i) => `
     <tr class="${r.id === me.id ? "me" : ""}">
       <td class="rank">${i + 1}</td>
       <td class="lb-name">${r.name}</td>
@@ -399,6 +407,41 @@ async function showLeaderboard() {
       <td class="lb-pts">${r.points}</td>
     </tr>`).join("");
 
+  // Season selector tabs (only shown when more than one season exists)
+  const seasonTabs = allSeasons.length > 1 ? `
+    <div class="season-tabs">
+      ${allSeasons.map(s => `<button class="season-tab${s === season ? " active" : ""}" data-season="${s}">Season ${s}</button>`).join("")}
+    </div>` : "";
+
+  // Match history for this season
+  const matchRows = seasonMatches.map(m => {
+    const nameA = m.expand?.player_a?.display_name ?? "?";
+    const nameB = m.expand?.player_b?.display_name ?? "?";
+    const isMe = m.player_a === me.id || m.player_b === me.id;
+    const done = m.status === "complete" || m.status === "forfeit";
+
+    let ocCell;
+    if (!done) {
+      ocCell = `<span class="muted">${m.status}</span>`;
+    } else if (isMe) {
+      const oc = outcomeFor(m, me.id);
+      ocCell = `<span class="outcome ${oc.cls}">${oc.label}</span>`;
+    } else {
+      // Not my match — show which side won using already-expanded player names
+      const winnerName = m.winner === m.player_a ? nameA : (m.winner === m.player_b ? nameB : null);
+      ocCell = winnerName
+        ? `<span class="muted">${winnerName}</span>`
+        : `<span class="muted">Tie</span>`;
+    }
+
+    const clickable = isMe && done;
+    return `<tr class="match-row${clickable ? " clickable" : ""}"${clickable ? ` data-match="${m.id}"` : ""}>
+      <td class="rnd">R${m.round}</td>
+      <td>${nameA} vs ${nameB}</td>
+      <td>${ocCell}</td>
+    </tr>`;
+  }).join("");
+
   render(`
     <div class="card leaderboard">
       <header>
@@ -406,13 +449,27 @@ async function showLeaderboard() {
         <span class="match-meta">Season ${season}</span>
       </header>
       <h1>Leaderboard</h1>
+      ${seasonTabs}
+      <h2>Standings</h2>
       <table class="lb-table">
         <thead><tr><th>#</th><th>Player</th><th>W</th><th>T</th><th>L</th><th>Pts</th></tr></thead>
-        <tbody>${body}</tbody>
+        <tbody>${lbBody}</tbody>
+      </table>
+      <h2>Matches</h2>
+      <table class="lb-table match-hist">
+        <thead><tr><th>Rnd</th><th>Matchup</th><th>Result</th></tr></thead>
+        <tbody>${matchRows}</tbody>
       </table>
     </div>
   `);
+
   el("back-btn").addEventListener("click", showDashboard);
+  document.querySelectorAll(".season-tab").forEach(btn => {
+    btn.addEventListener("click", () => showLeaderboard(+btn.dataset.season));
+  });
+  document.querySelectorAll(".match-row.clickable").forEach(row => {
+    row.addEventListener("click", () => showResults(row.dataset.match));
+  });
 }
 
 // ---------- boot ----------

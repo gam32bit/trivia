@@ -272,6 +272,22 @@ button[type="submit"]:disabled { opacity: 0.6; cursor: default; }
 
 /* Leaderboard */
 .leaderboard h1 { font-size: 1.3rem; margin-bottom: 1rem; text-align: center; }
+.leaderboard h2 { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); margin: 1.25rem 0 0.5rem; }
+
+/* Season tabs */
+.season-tabs { display: flex; gap: 0.4rem; flex-wrap: wrap; margin-bottom: 1rem; }
+.season-tab {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 0.85rem;
+  padding: 0.3rem 0.75rem;
+  transition: border-color 0.15s, color 0.15s;
+}
+.season-tab:hover { color: var(--text); border-color: var(--accent); }
+.season-tab.active { background: var(--accent); border-color: var(--accent); color: #fff; }
 .lb-table { width: 100%; border-collapse: collapse; }
 .lb-table th {
   font-size: 0.7rem;
@@ -294,3 +310,13 @@ button[type="submit"]:disabled { opacity: 0.6; cursor: default; }
 .lb-table td.lb-pts { font-weight: 700; color: var(--accent); }
 .lb-table tr.me td { background: rgba(91,111,255,0.08); }
 .lb-table tr.me td.lb-name::after { content: " (you)"; color: var(--muted); font-weight: 400; font-size: 0.8rem; }
+
+/* Match history table (inside leaderboard) */
+.match-hist td { font-size: 0.9rem; }
+.match-hist td:first-child { text-align: left; color: var(--muted); width: 3rem; }
+.match-hist td:nth-child(2) { text-align: left; }
+.match-hist td:nth-child(3) { text-align: right; }
+.match-hist th:first-child { text-align: left; }
+.match-hist th:nth-child(2) { text-align: left; }
+.match-row.clickable { cursor: pointer; }
+.match-row.clickable:hover td { background: rgba(91,111,255,0.06); }
