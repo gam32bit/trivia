@@ -35,8 +35,10 @@ def source_id_true(fact_text):
     return hashlib.sha1(fact_text.encode()).hexdigest()
 
 
-def source_id_false(fact_text):
-    return hashlib.sha1(("FALSE:" + fact_text).encode()).hexdigest()
+def source_id_false(stored_text):
+    # Keyed on the stored text (the false variant), not the source fact, so two
+    # source facts that generate the same Claude output don't create duplicate rows.
+    return hashlib.sha1(("FALSE:" + stored_text).encode()).hexdigest()
 
 
 def init_db(path):
@@ -73,7 +75,10 @@ def generate_false_variant(client, fact_text):
         max_tokens=256,
         messages=[{"role": "user", "content": prompt}],
     )
-    return msg.content[0].text.strip()
+    text = msg.content[0].text.strip()
+    if not text:
+        raise ValueError("Claude returned an empty false variant")
+    return text
 
 
 def upsert_question(conn, source_id, text, correct_answer):
@@ -130,7 +135,7 @@ def main():
                 errors += 1
                 time.sleep(SLEEP_SECONDS)
                 continue
-            sid = source_id_false(fact)
+            sid = source_id_false(false_variant)
             added = upsert_question(conn, sid, false_variant, "False")
             if added:
                 added_false += 1

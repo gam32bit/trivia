@@ -49,6 +49,14 @@ migrate((app) => {
 }, (app) => {
   const collection = app.findCollectionByNameOrId("pbc_4009210445")
 
+  // Drop all T/F questions before reverting the schema. Without this, every row
+  // would get otdb_id="" after the field is re-added, violating the unique index.
+  app.db().newQuery("DELETE FROM questions").execute()
+
+  // Clear the source_id unique index before removing the field
+  collection.indexes = []
+  app.save(collection)
+
   collection.fields.removeById("text847263519") // source_id
 
   collection.fields.addAt(1, new Field({

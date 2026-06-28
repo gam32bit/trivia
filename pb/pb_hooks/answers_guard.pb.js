@@ -11,8 +11,15 @@ onRecordCreateRequest((e) => {
   try {
     const question = $app.findRecordById("questions", questionId);
     isCorrect = response === question.getString("correct_answer");
-  } catch (_) {
-    // Unknown question — leave is_correct false
+  } catch (err) {
+    const msg = String(err);
+    if (msg.includes("no rows") || msg.includes("not found") || msg.includes("NoResultsError")) {
+      // Unknown question ID — leave is_correct false
+    } else {
+      // Transient DB error: re-throw so the client gets an error rather than a
+      // silent wrong mark. The answer is not persisted.
+      throw err;
+    }
   }
 
   e.record.set("is_correct", isCorrect);

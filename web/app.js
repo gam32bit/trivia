@@ -268,8 +268,19 @@ async function showPlay(match) {
         });
         isCorrect = saved.is_correct;
       } catch (err) {
-        // Duplicate submission blocked by server — treat as already done
-        console.warn("Answer create failed (likely duplicate):", err);
+        // 400 = duplicate submission blocked by a unique constraint — answer already saved.
+        // Any other status (network error, 5xx) means the answer was NOT persisted; un-submit
+        // so the player can tap again.
+        if (err?.status !== 400) {
+          submitted.delete(qIndex);
+          el("choices").querySelectorAll(".choice-btn").forEach(b => {
+            b.disabled = false;
+            b.classList.remove("selected");
+          });
+          console.error("Answer create failed — allowing retry:", err);
+          return;
+        }
+        console.warn("Answer create blocked (duplicate):", err);
       }
 
       // Show correct/incorrect feedback briefly then advance
@@ -372,7 +383,13 @@ async function showResults(matchId) {
     const cell = byQuestion[qid] || {};
     const q = cell.q;
     const qText = q ? decodeEntities(q.text) : "(question unavailable)";
-    const correct = q?.correct_answer ? decodeEntities(q.correct_answer) : "";
+    // correct_answer is hidden from the REST API (migration 1784000002). For T/F
+    // questions we can derive it from any recorded answer: if is_correct then their
+    // response IS the answer; otherwise it's the other option.
+    const anyAnswer = cell.mine || cell.theirs;
+    const correct = anyAnswer
+      ? (anyAnswer.is_correct ? anyAnswer.response : (anyAnswer.response === "True" ? "False" : "True"))
+      : "";
     return `
       <div class="result-q">
         <div class="rq-text"><span class="rq-num">Q${i + 1}</span>${qText}</div>

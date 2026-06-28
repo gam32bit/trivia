@@ -2,9 +2,9 @@
 // Runs daily at 05:05 UTC (00:05 EST / 01:05 EDT) — always after ET midnight.
 // Sweeps any pending/partial match whose match_date calendar day is before today ET.
 //
-// If exactly one player submitted all 3 answers → they win (standings updated).
+// If exactly one player submitted all 5 answers → they win (standings updated).
 // The non-submitter gets a recorded loss (consistent with normal match scoring).
-// If neither player submitted 3 answers → status=forfeit, no standings change.
+// If neither player submitted 5 answers → status=forfeit, no standings change.
 //
 // NOTE: PocketBase JSVM isolated-scope gotcha — all helpers are inline.
 cronAdd("forfeits", "5 5 * * *", () => {
@@ -84,8 +84,8 @@ cronAdd("forfeits", "5 5 * * *", () => {
       counts[pid] = (counts[pid] || 0) + 1;
     }
 
-    const aDone = (counts[playerA] || 0) >= 3;
-    const bDone = (counts[playerB] || 0) >= 3;
+    const aDone = (counts[playerA] || 0) >= 5;
+    const bDone = (counts[playerB] || 0) >= 5;
 
     match.set("status", "forfeit");
 
