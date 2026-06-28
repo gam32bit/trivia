@@ -2,8 +2,8 @@
 // (winner + standings) on the partial -> complete transition.
 //
 // Fires after every answers create. We count answers per player for the match:
-//   - first player reaches 3  -> pending -> partial
-//   - second player reaches 3 -> partial -> complete, then score.
+//   - first player reaches 5  -> pending -> partial
+//   - second player reaches 5 -> partial -> complete, then score.
 //
 // Scoring (locked decision): win = 2 pts, tie = 1 pt each, loss = 0 pts.
 // Standings rows are upserted here because generate_season.py does not
@@ -23,7 +23,7 @@ onRecordAfterCreateSuccess((e) => {
     playerCounts[pid] = (playerCounts[pid] || 0) + 1;
   }
 
-  const donePlayers = Object.values(playerCounts).filter((c) => c >= 3).length;
+  const donePlayers = Object.values(playerCounts).filter((c) => c >= 5).length;
   if (donePlayers === 0) return;
 
   const match = $app.findRecordById("matches", matchId);

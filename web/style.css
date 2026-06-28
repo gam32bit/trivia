@@ -160,6 +160,20 @@ body {
 .choice-btn.correct { border-color: var(--correct); background: rgba(46,204,113,0.12); color: var(--correct); opacity: 1; }
 .choice-btn.wrong { border-color: var(--wrong); background: rgba(231,76,60,0.12); color: var(--wrong); opacity: 1; }
 
+/* True/False buttons — two large side-by-side choices */
+.choices:has(.tf-btn) {
+  flex-direction: row;
+  gap: 0.75rem;
+}
+.tf-btn {
+  flex: 1;
+  text-align: center;
+  font-size: 1.15rem;
+  font-weight: 700;
+  padding: 1.5rem 1rem;
+  letter-spacing: 0.04em;
+}
+
 .done-msg {
   text-align: center;
   font-size: 1rem;

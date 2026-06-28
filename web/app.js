@@ -41,7 +41,7 @@ function avatarHtml(user, size) {
     const url = `${pb.baseUrl}/api/files/users/${user.id}/${user.profile_pic}?thumb=${size}x${size}`;
     return `<img class="avatar" style="width:${size}px;height:${size}px" src="${url}" alt="">`;
   }
-  const initial = (user?.display_name || "?").charAt(0).toUpperCase();
+  const initial = escHtml((user?.display_name || "?").charAt(0).toUpperCase());
   return `<span class="avatar avatar-init" style="width:${size}px;height:${size}px;font-size:${Math.round(size * 0.4)}px">${initial}</span>`;
 }
 
@@ -119,7 +119,7 @@ async function showDashboard() {
   } else {
     const isA = match.player_a === me.id;
     const oppRec = isA ? match.expand?.player_b : match.expand?.player_a;
-    const opponentName = oppRec?.display_name ?? "Opponent";
+    const opponentName = escHtml(oppRec?.display_name ?? "Opponent");
 
     let myAnswerCount = 0;
     try {
@@ -131,7 +131,7 @@ async function showDashboard() {
     } catch {
       myAnswerCount = 0;
     }
-    const iSubmitted = myAnswerCount >= 3;
+    const iSubmitted = myAnswerCount >= 5;
     const status = match.status;
 
     let statusBlock;
@@ -146,7 +146,7 @@ async function showDashboard() {
     todayBlock = `
       <div class="match-summary">
         <div class="vs-line">
-          <div class="vs-player">${avatarHtml(me, 44)}<span>${me.display_name}</span></div>
+          <div class="vs-player">${avatarHtml(me, 44)}<span>${escHtml(me.display_name)}</span></div>
           <span class="vs-sep">vs</span>
           <div class="vs-player">${avatarHtml(oppRec, 44)}<span>${opponentName}</span></div>
         </div>
@@ -173,7 +173,7 @@ async function showDashboard() {
       <h2>Recent results</h2>
       <ul class="recent-list">
         ${recent.map((m) => {
-          const opp = (m.player_a === me.id ? m.expand?.player_b : m.expand?.player_a)?.display_name ?? "Opponent";
+          const opp = escHtml((m.player_a === me.id ? m.expand?.player_b : m.expand?.player_a)?.display_name ?? "Opponent");
           const oc = outcomeFor(m, me.id);
           return `<li class="recent-item" data-match="${m.id}">
             <span class="recent-opp">vs ${opp}</span>
@@ -186,7 +186,7 @@ async function showDashboard() {
   render(`
     <div class="card dashboard">
       <header>
-        <span class="greeting">${avatarHtml(me, 30)} ${me.display_name}</span>
+        <span class="greeting">${avatarHtml(me, 30)} ${escHtml(me.display_name)}</span>
         <nav class="nav-actions">
           <button class="link-btn" id="leaderboard-btn">Leaderboard</button>
           <button class="link-btn" id="profile-btn">Profile</button>
@@ -232,12 +232,10 @@ async function showPlay(match) {
 
   function renderQuestion() {
     const q = questions[qIndex];
-    const choices = shuffle([q.correct_answer, ...q.incorrect_answers]);
     const safeText = decodeEntities(q.text);
-    const choiceHtml = choices.map(c => {
-      const decoded = decodeEntities(c);
-      return `<button class="choice-btn" data-choice="${encodeURIComponent(c)}">${decoded}</button>`;
-    }).join("");
+    const choiceHtml = ['True', 'False'].map(c =>
+      `<button class="choice-btn tf-btn" data-choice="${c}">${c}</button>`
+    ).join('');
 
     render(`
       <div class="card play-card">
@@ -258,16 +256,17 @@ async function showPlay(match) {
       btn.classList.add("selected");
 
       const response = decodeURIComponent(btn.dataset.choice);
-      const isCorrect = response === q.correct_answer;
 
+      // is_correct is computed server-side (answers_guard.pb.js) to prevent forgery.
+      let isCorrect = false;
       try {
-        await pb.collection("answers").create({
+        const saved = await pb.collection("answers").create({
           match: match.id,
           player: pb.authStore.model.id,
           question: q.id,
           response,
-          is_correct: isCorrect,
         });
+        isCorrect = saved.is_correct;
       } catch (err) {
         // Duplicate submission blocked by server — treat as already done
         console.warn("Answer create failed (likely duplicate):", err);
@@ -276,8 +275,9 @@ async function showPlay(match) {
       // Show correct/incorrect feedback briefly then advance
       btn.classList.add(isCorrect ? "correct" : "wrong");
       if (!isCorrect) {
+        // For T/F: the other button is the correct one
         el("choices").querySelectorAll(".choice-btn").forEach(b => {
-          if (decodeURIComponent(b.dataset.choice) === q.correct_answer) b.classList.add("correct");
+          if (b !== btn) b.classList.add("correct");
         });
       }
 
@@ -300,7 +300,7 @@ async function showPlay(match) {
           <div class="card">
             <p class="done-msg">${matchDone
               ? "Match complete! Both players have submitted."
-              : `All done! Waiting for ${opponentDoneName ?? "opponent"} to finish.`
+              : `All done! Waiting for ${escHtml(opponentDoneName ?? "opponent")} to finish.`
             }</p>
             <button id="dash-btn" class="play-btn">Back to dashboard</button>
           </div>
@@ -339,7 +339,7 @@ async function showResults(matchId) {
   const isA = match.player_a === me.id;
   const myRec = isA ? match.expand?.player_a : match.expand?.player_b;
   const oppRec = isA ? match.expand?.player_b : match.expand?.player_a;
-  const oppName = oppRec?.display_name ?? "Opponent";
+  const oppName = escHtml(oppRec?.display_name ?? "Opponent");
   const winnerRec = match.winner === match.player_a ? match.expand?.player_a
     : match.winner === match.player_b ? match.expand?.player_b : null;
   const myTaunt = isA ? match.a_taunt : match.b_taunt;
@@ -358,11 +358,12 @@ async function showResults(matchId) {
   const order = match.questions && match.questions.length ? match.questions : Object.keys(byQuestion);
   const oc = outcomeFor(match, me.id);
 
+  // label is always "You" (literal) or pre-escaped oppName — do not re-escape.
   const answerRow = (label, a) => {
     if (!a) return `<div class="ans-row"><span class="ans-who">${label}</span><span class="ans-resp muted">— no answer —</span></div>`;
     return `<div class="ans-row ${a.is_correct ? "ok" : "no"}">
       <span class="ans-who">${label}</span>
-      <span class="ans-resp">${decodeEntities(a.response)}</span>
+      <span class="ans-resp">${escHtml(a.response)}</span>
       <span class="mark">${a.is_correct ? "✓" : "✗"}</span>
     </div>`;
   };
@@ -371,7 +372,7 @@ async function showResults(matchId) {
     const cell = byQuestion[qid] || {};
     const q = cell.q;
     const qText = q ? decodeEntities(q.text) : "(question unavailable)";
-    const correct = q ? decodeEntities(q.correct_answer) : "";
+    const correct = q?.correct_answer ? decodeEntities(q.correct_answer) : "";
     return `
       <div class="result-q">
         <div class="rq-text"><span class="rq-num">Q${i + 1}</span>${qText}</div>
@@ -471,7 +472,7 @@ async function showLeaderboard(season) {
   const lbBody = rows.map((r, i) => `
     <tr class="${r.id === me.id ? "me" : ""}">
       <td class="rank">${i + 1}</td>
-      <td class="lb-name">${r.name}</td>
+      <td class="lb-name">${escHtml(r.name)}</td>
       <td>${r.wins}</td>
       <td>${r.ties}</td>
       <td>${r.losses}</td>
@@ -486,8 +487,8 @@ async function showLeaderboard(season) {
 
   // Match history for this season
   const matchRows = seasonMatches.map(m => {
-    const nameA = m.expand?.player_a?.display_name ?? "?";
-    const nameB = m.expand?.player_b?.display_name ?? "?";
+    const nameA = escHtml(m.expand?.player_a?.display_name ?? "?");
+    const nameB = escHtml(m.expand?.player_b?.display_name ?? "?");
     const isMe = m.player_a === me.id || m.player_b === me.id;
     const done = m.status === "complete" || m.status === "forfeit";
 

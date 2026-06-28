@@ -10,7 +10,7 @@ Repeated for --cycles cycles. Dates are consecutive weekdays (Mon-Fri) in
 America/New_York, starting from --start-date.
 
 Questions are drawn at random from unused questions (used_in_round IS NULL)
-and marked with the round number. 3 questions per match, never reused.
+and marked with the round number. 5 questions per match, never reused.
 
 Idempotent by season: exits without changes if season N already has matches.
 
@@ -117,9 +117,13 @@ def main():
     ap.add_argument("--cycles", type=int, default=4, help="number of round-robin cycles (default 4)")
     ap.add_argument("--pb", default="http://localhost:8090", help="PocketBase base URL")
     ap.add_argument("--admin", default="admin@trivia.local", help="admin email")
-    ap.add_argument("--password", default=os.environ.get("PB_ADMIN_PASSWORD", "Admin1234!"),
-                    help="admin password (or set PB_ADMIN_PASSWORD)")
+    ap.add_argument("--password", default=os.environ.get("PB_ADMIN_PASSWORD"),
+                    help="admin password (or set PB_ADMIN_PASSWORD env var)")
     args = ap.parse_args()
+
+    if not args.password:
+        print("Error: admin password required. Use --password or set PB_ADMIN_PASSWORD.", file=sys.stderr)
+        sys.exit(1)
 
     start_date = date.fromisoformat(args.start_date)
     token = authenticate(args.pb, args.admin, args.password)
@@ -147,7 +151,7 @@ def main():
     # PocketBase stores 0 (not null) for unset number fields; rounds are 1-indexed, so 0 = unused.
     unused_q = get_all_records(args.pb, token, "questions",
                                 filter_str="used_in_round = 0", fields="id")
-    questions_needed = 3 * 2 * total_days  # 3 questions × 2 matches/day × days
+    questions_needed = 5 * 2 * total_days  # 5 questions × 2 matches/day × days
     if len(unused_q) < questions_needed:
         print(f"Need {questions_needed} unused questions but only {len(unused_q)} available.", file=sys.stderr)
         sys.exit(1)
@@ -168,8 +172,8 @@ def main():
             for (i, j) in pairs:
                 player_a = users[i]["id"]
                 player_b = users[j]["id"]
-                qs = q_pool[q_idx:q_idx + 3]
-                q_idx += 3
+                qs = q_pool[q_idx:q_idx + 5]
+                q_idx += 5
 
                 match_body = {
                     "season": args.season,

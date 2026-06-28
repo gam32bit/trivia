@@ -2,7 +2,7 @@
 """
 import_questions.py — Import questions from trivia.db into PocketBase.
 
-Idempotent: uses otdb_id as the dedupe key. Re-running adds only new questions
+Idempotent: uses source_id as the dedupe key. Re-running adds only new questions
 and never creates duplicates.
 
 Usage:
@@ -12,6 +12,7 @@ Usage:
 
 import argparse
 import json
+import os
 import sqlite3
 import sys
 import urllib.error
@@ -31,18 +32,18 @@ def authenticate(pb_url, admin_email, admin_password):
 
 
 def fetch_existing_ids(pb_url, token):
-    """Return set of all otdb_ids already in PocketBase."""
+    """Return set of all source_ids already in PocketBase."""
     existing = set()
     page = 1
     per_page = 500
     headers = {"Authorization": token}
     while True:
-        url = f"{pb_url}/api/collections/questions/records?page={page}&perPage={per_page}&fields=otdb_id"
+        url = f"{pb_url}/api/collections/questions/records?page={page}&perPage={per_page}&fields=source_id"
         req = urllib.request.Request(url, headers=headers)
         with urllib.request.urlopen(req) as r:
             data = json.load(r)
         for item in data["items"]:
-            existing.add(item["otdb_id"])
+            existing.add(item["source_id"])
         if page >= data["totalPages"]:
             break
         page += 1
@@ -51,17 +52,14 @@ def fetch_existing_ids(pb_url, token):
 
 def create_question(pb_url, token, row, existing_ids):
     """Insert one question if not already present. Returns True if inserted."""
-    otdb_id, category, difficulty, qtype, text, correct_answer, incorrect_answers_json, used_in_round = row
-    if otdb_id in existing_ids:
+    source_id, category, text, correct_answer, used_in_round = row
+    if source_id in existing_ids:
         return False
     body = {
-        "otdb_id": otdb_id,
+        "source_id": source_id,
         "category": category,
-        "difficulty": difficulty,
-        "type": qtype,
         "text": text,
         "correct_answer": correct_answer,
-        "incorrect_answers": json.loads(incorrect_answers_json) if incorrect_answers_json else [],
     }
     if used_in_round is not None:
         body["used_in_round"] = used_in_round
@@ -81,7 +79,7 @@ def create_question(pb_url, token, row, existing_ids):
         msg = e.read().decode()
         if "unique" in msg.lower() or e.code == 400:
             return False
-        print(f"Error inserting {otdb_id}: {e.code} {msg}", file=sys.stderr)
+        print(f"Error inserting {source_id}: {e.code} {msg}", file=sys.stderr)
         return False
 
 
@@ -90,12 +88,17 @@ def main():
     ap.add_argument("--db", default="trivia.db", help="path to trivia.db")
     ap.add_argument("--pb", default="http://localhost:8090", help="PocketBase base URL")
     ap.add_argument("--admin", default="admin@trivia.local", help="admin email")
-    ap.add_argument("--password", default="Admin1234!", help="admin password")
+    ap.add_argument("--password", default=os.environ.get("PB_ADMIN_PASSWORD"),
+                    help="admin password (or set PB_ADMIN_PASSWORD env var)")
     args = ap.parse_args()
+
+    if not args.password:
+        print("Error: admin password required. Use --password or set PB_ADMIN_PASSWORD.", file=sys.stderr)
+        sys.exit(1)
 
     conn = sqlite3.connect(args.db)
     rows = conn.execute(
-        "SELECT otdb_id, category, difficulty, type, question, correct_answer, incorrect_answers, used_in_round FROM questions"
+        "SELECT source_id, category, text, correct_answer, used_in_round FROM questions"
     ).fetchall()
     conn.close()
     print(f"trivia.db: {len(rows)} questions total")

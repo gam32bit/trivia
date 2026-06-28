@@ -3,3 +3,5 @@ pb/pocketbase
 pb/pb_data/
 devlog/
 .serena/
+.env
+.claude/settings.local.json

@@ -9,12 +9,12 @@ negative season stays below the real seasons so the leaderboard's
 "current season = max" never defaults to the test.
 
 Question sources (--source):
-  reuse  (default): take the 3 questions from an existing season-1 match that
+  reuse  (default): take the 5 questions from an existing season-1 match that
                     excludes BOTH test players. In a 4-player round-robin that
                     is exactly the complementary pairing, so neither test player
                     ever meets these questions in a real match. Requires the
                     target season (default 1) to already be generated.
-  fresh           : draw 3 unused questions (used_in_round = 0) and mark them
+  fresh           : draw 5 unused questions (used_in_round = 0) and mark them
                     used_in_round = -1 (a non-zero "burned for test" sentinel,
                     so generate_season's `used_in_round = 0` filter skips them).
                     Works before the real season exists.
@@ -121,9 +121,13 @@ def main():
                     help="match date YYYY-MM-DD (default: today, local)")
     ap.add_argument("--pb", default="http://localhost:8090", help="PocketBase base URL")
     ap.add_argument("--admin", default="admin@trivia.local", help="admin email")
-    ap.add_argument("--password", default=os.environ.get("PB_ADMIN_PASSWORD", "Admin1234!"),
-                    help="admin password (or set PB_ADMIN_PASSWORD)")
+    ap.add_argument("--password", default=os.environ.get("PB_ADMIN_PASSWORD"),
+                    help="admin password (or set PB_ADMIN_PASSWORD env var)")
     args = ap.parse_args()
+
+    if not args.password:
+        print("Error: admin password required. Use --password or set PB_ADMIN_PASSWORD.", file=sys.stderr)
+        sys.exit(1)
 
     token = authenticate(args.pb, args.admin, args.password)
 
@@ -161,21 +165,21 @@ def main():
             sys.exit(1)
         m = src[0]
         questions = m["questions"]
-        print(f"\nBorrowing 3 questions from season-{args.from_season} match {m['id']} "
+        print(f"\nBorrowing 5 questions from season-{args.from_season} match {m['id']} "
               f"(round {m['round']}) — neither test player is in it.")
     else:  # fresh
         unused = get_all_records(args.pb, token, "questions",
                                  filter_str="used_in_round = 0", fields="id")
-        if len(unused) < 3:
-            print(f"Need 3 unused questions, found {len(unused)}.", file=sys.stderr)
+        if len(unused) < 5:
+            print(f"Need 5 unused questions, found {len(unused)}.", file=sys.stderr)
             sys.exit(1)
         random.shuffle(unused)
-        questions = [q["id"] for q in unused[:3]]
+        questions = [q["id"] for q in unused[:5]]
         for qid in questions:
             # -1 = burned for a test: non-zero so generate_season won't reuse it.
             api_patch(args.pb, token, f"/api/collections/questions/records/{qid}",
                       {"used_in_round": -1})
-        print("\nDrew 3 fresh questions and marked them used_in_round=-1 (won't be reused).")
+        print("\nDrew 5 fresh questions and marked them used_in_round=-1 (won't be reused).")
 
     match_body = {
         "season": -1,
