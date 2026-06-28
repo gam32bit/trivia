@@ -1,4 +1,12 @@
-const pb = new PocketBase("http://localhost:8090");
+// Local dev (file:// or localhost) talks to a separate PocketBase on :8090.
+// In production the app is served by PocketBase itself, so use the same origin.
+const PB_URL =
+  location.protocol === "file:" ||
+  location.hostname === "localhost" ||
+  location.hostname === "127.0.0.1"
+    ? "http://localhost:8090"
+    : location.origin;
+const pb = new PocketBase(PB_URL);
 
 // ---------- helpers ----------
 
@@ -22,6 +30,25 @@ function shuffle(arr) {
 }
 
 function el(id) { return document.getElementById(id); }
+
+function escHtml(str) {
+  return String(str || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+function avatarHtml(user, size) {
+  size = size || 36;
+  if (user?.profile_pic) {
+    const url = `${pb.baseUrl}/api/files/users/${user.id}/${user.profile_pic}?thumb=${size}x${size}`;
+    return `<img class="avatar" style="width:${size}px;height:${size}px" src="${url}" alt="">`;
+  }
+  const initial = (user?.display_name || "?").charAt(0).toUpperCase();
+  return `<span class="avatar avatar-init" style="width:${size}px;height:${size}px;font-size:${Math.round(size * 0.4)}px">${initial}</span>`;
+}
+
+function victoryImgHtml(user) {
+  if (!user?.victory_pic) return "";
+  return `<img class="victory-shot" src="${pb.baseUrl}/api/files/users/${user.id}/${user.victory_pic}" alt="">`;
+}
 
 function render(html) {
   el("app").innerHTML = html;
@@ -91,7 +118,8 @@ async function showDashboard() {
     todayBlock = `<p class="no-match">No match scheduled for today.</p>`;
   } else {
     const isA = match.player_a === me.id;
-    const opponentName = (isA ? match.expand?.player_b : match.expand?.player_a)?.display_name ?? "Opponent";
+    const oppRec = isA ? match.expand?.player_b : match.expand?.player_a;
+    const opponentName = oppRec?.display_name ?? "Opponent";
 
     let myAnswerCount = 0;
     try {
@@ -117,7 +145,11 @@ async function showDashboard() {
 
     todayBlock = `
       <div class="match-summary">
-        <div class="vs-line">vs. <strong>${opponentName}</strong></div>
+        <div class="vs-line">
+          <div class="vs-player">${avatarHtml(me, 44)}<span>${me.display_name}</span></div>
+          <span class="vs-sep">vs</span>
+          <div class="vs-player">${avatarHtml(oppRec, 44)}<span>${opponentName}</span></div>
+        </div>
         <div class="match-meta">Season ${match.season} · Round ${match.round}</div>
       </div>
       ${statusBlock}`;
@@ -154,9 +186,10 @@ async function showDashboard() {
   render(`
     <div class="card dashboard">
       <header>
-        <span class="greeting">Hi, ${me.display_name}</span>
+        <span class="greeting">${avatarHtml(me, 30)} ${me.display_name}</span>
         <nav class="nav-actions">
           <button class="link-btn" id="leaderboard-btn">Leaderboard</button>
+          <button class="link-btn" id="profile-btn">Profile</button>
           <button class="link-btn" id="logout-btn">Sign out</button>
         </nav>
       </header>
@@ -167,6 +200,7 @@ async function showDashboard() {
 
   el("logout-btn").addEventListener("click", () => { pb.authStore.clear(); showLogin(); });
   el("leaderboard-btn").addEventListener("click", () => showLeaderboard());
+  el("profile-btn").addEventListener("click", showProfile);
   if (el("play-btn")) el("play-btn").addEventListener("click", () => showPlay(match));
   if (el("results-btn")) el("results-btn").addEventListener("click", () => showResults(match.id));
   document.querySelectorAll(".recent-item").forEach((li) => {
@@ -176,6 +210,12 @@ async function showDashboard() {
 
 async function showPlay(match) {
   render(`<div class="card"><p class="loading">Loading questions…</p></div>`);
+
+  const me = pb.authStore.model;
+  const isA = match.player_a === me.id;
+  const myRec = isA ? match.expand?.player_a : match.expand?.player_b;
+  const oppRec = isA ? match.expand?.player_b : match.expand?.player_a;
+  const playHeader = `<div class="play-vs">${avatarHtml(myRec, 28)}<span class="vs-sep">vs</span>${avatarHtml(oppRec, 28)}</div>`;
 
   const questionIds = match.questions;
   let questions;
@@ -201,6 +241,7 @@ async function showPlay(match) {
 
     render(`
       <div class="card play-card">
+        ${playHeader}
         <div class="q-progress">Question ${qIndex + 1} of ${questions.length}</div>
         <div class="q-text">${safeText}</div>
         <div class="choices" id="choices">${choiceHtml}</div>
@@ -246,7 +287,6 @@ async function showPlay(match) {
       if (qIndex < questions.length) {
         renderQuestion();
       } else {
-        const me = pb.authStore.model;
         const opponentDoneName = me.id === match.player_a
           ? match.expand?.player_b?.display_name
           : match.expand?.player_a?.display_name;
@@ -297,7 +337,13 @@ async function showResults(matchId) {
   }
 
   const isA = match.player_a === me.id;
-  const oppName = (isA ? match.expand?.player_b : match.expand?.player_a)?.display_name ?? "Opponent";
+  const myRec = isA ? match.expand?.player_a : match.expand?.player_b;
+  const oppRec = isA ? match.expand?.player_b : match.expand?.player_a;
+  const oppName = oppRec?.display_name ?? "Opponent";
+  const winnerRec = match.winner === match.player_a ? match.expand?.player_a
+    : match.winner === match.player_b ? match.expand?.player_b : null;
+  const myTaunt = isA ? match.a_taunt : match.b_taunt;
+  const oppTaunt = isA ? match.b_taunt : match.a_taunt;
 
   // Group answers by question, splitting mine vs. opponent's.
   const byQuestion = {};
@@ -340,6 +386,17 @@ async function showResults(matchId) {
     : oc.label === "Tied" ? "Tie game"
     : oc.label;
 
+  const bannerImg = oc.label !== "Tied" ? victoryImgHtml(winnerRec) : "";
+  const shownTaunt = oc.label === "Won" ? myTaunt : oc.label === "Lost" ? oppTaunt : null;
+  const tauntHtml = shownTaunt
+    ? `<div class="taunt-bubble${oc.label === "Won" ? " mine" : " theirs"}">"${escHtml(shownTaunt)}"</div>`
+    : oc.label === "Won"
+      ? `<div class="taunt-form">
+          <input type="text" id="taunt-input" placeholder="Drop your victory taunt…" maxlength="200" value="${escHtml(me.taunt_signature || "")}">
+          <button class="play-btn" id="post-taunt-btn">Post taunt</button>
+         </div>`
+      : "";
+
   render(`
     <div class="card results">
       <header>
@@ -347,13 +404,27 @@ async function showResults(matchId) {
         <span class="match-meta">Season ${match.season} · Round ${match.round}</span>
       </header>
       <div class="result-banner ${oc.cls}">
+        ${bannerImg}
         <div class="rb-outcome">${headline}</div>
         <div class="rb-score">You ${myScore} — ${oppName} ${oppScore}</div>
+        ${tauntHtml}
       </div>
       <div class="result-list">${rows}</div>
     </div>
   `);
   el("back-btn").addEventListener("click", showDashboard);
+
+  if (el("post-taunt-btn")) {
+    el("post-taunt-btn").addEventListener("click", async () => {
+      const text = el("taunt-input").value.trim();
+      if (!text) return;
+      el("post-taunt-btn").disabled = true;
+      try {
+        await pb.collection("matches").update(matchId, { [isA ? "a_taunt" : "b_taunt"]: text });
+        showResults(matchId);
+      } catch { el("post-taunt-btn").disabled = false; }
+    });
+  }
 }
 
 async function showLeaderboard(season) {
@@ -469,6 +540,100 @@ async function showLeaderboard(season) {
   });
   document.querySelectorAll(".match-row.clickable").forEach(row => {
     row.addEventListener("click", () => showResults(row.dataset.match));
+  });
+}
+
+async function showProfile() {
+  const me = pb.authStore.model;
+  const profUrl = me.profile_pic ? `${pb.baseUrl}/api/files/users/${me.id}/${me.profile_pic}` : null;
+  const vicUrl = me.victory_pic ? `${pb.baseUrl}/api/files/users/${me.id}/${me.victory_pic}` : null;
+
+  render(`
+    <div class="card profile-card">
+      <header>
+        <button class="link-btn" id="back-btn">← Back</button>
+        <span>Profile</span>
+      </header>
+      <form id="profile-form">
+        <div class="photo-pair">
+          <div class="photo-slot">
+            <div class="photo-label">Profile photo</div>
+            ${profUrl
+              ? `<img class="photo-preview" id="prof-preview" src="${profUrl}" alt="">`
+              : `<div class="photo-placeholder" id="prof-preview">No photo</div>`}
+            <label class="upload-label">Change<input type="file" id="prof-input" accept="image/*" hidden></label>
+          </div>
+          <div class="photo-slot">
+            <div class="photo-label">Victory photo</div>
+            ${vicUrl
+              ? `<img class="photo-preview" id="vic-preview" src="${vicUrl}" alt="">`
+              : `<div class="photo-placeholder" id="vic-preview">No photo</div>`}
+            <label class="upload-label">Change<input type="file" id="vic-input" accept="image/*" hidden></label>
+          </div>
+        </div>
+        <label class="field-label">
+          Victory taunt
+          <input type="text" id="taunt-sig" placeholder="What do you say when you win?" maxlength="200" value="${escHtml(me.taunt_signature || "")}">
+        </label>
+        <p id="profile-status" class="profile-status"></p>
+        <button type="submit" class="play-btn">Save</button>
+      </form>
+    </div>
+  `);
+
+  function attachPreview(inputId, previewId) {
+    el(inputId).addEventListener("change", (e) => {
+      const f = e.target.files[0];
+      if (!f) return;
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        const node = el(previewId);
+        if (!node) return;
+        if (node.tagName === "IMG") {
+          node.src = ev.target.result;
+        } else {
+          const img = document.createElement("img");
+          img.className = "photo-preview";
+          img.id = previewId;
+          img.alt = "";
+          img.src = ev.target.result;
+          node.replaceWith(img);
+        }
+      };
+      reader.readAsDataURL(f);
+    });
+  }
+
+  attachPreview("prof-input", "prof-preview");
+  attachPreview("vic-input", "vic-preview");
+  el("back-btn").addEventListener("click", showDashboard);
+
+  el("profile-form").addEventListener("submit", async (ev) => {
+    ev.preventDefault();
+    const btn = ev.target.querySelector("button[type='submit']");
+    const status = el("profile-status");
+    btn.disabled = true;
+    status.textContent = "";
+    status.style.color = "";
+
+    const fd = new FormData();
+    const profFile = el("prof-input").files[0];
+    const vicFile = el("vic-input").files[0];
+    if (profFile) fd.append("profile_pic", profFile);
+    if (vicFile) fd.append("victory_pic", vicFile);
+    fd.append("taunt_signature", el("taunt-sig").value.trim());
+
+    try {
+      await pb.collection("users").update(me.id, fd);
+      await pb.collection("users").authRefresh();
+      status.textContent = "Saved!";
+      status.style.color = "var(--correct)";
+    } catch (err) {
+      status.textContent = "Save failed.";
+      status.style.color = "var(--wrong)";
+      console.error(err);
+    }
+    btn.disabled = false;
   });
 }
 

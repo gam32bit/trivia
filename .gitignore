@@ -2,3 +2,4 @@ trivia.db
 pb/pocketbase
 pb/pb_data/
 devlog/
+.serena/
