@@ -488,6 +488,35 @@ button[type="submit"]:disabled { opacity: 0.6; cursor: default; animation: none;
 }
 .profile-status { min-height: 1.2em; font-size: 0.95rem; font-weight: bold; text-align: center; margin-bottom: 0.5rem; }
 
+/* audio recorder controls */
+#audio-section { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; margin-top: 0.2rem; }
+.taunt-audio-player { width: 100%; height: 36px; border-radius: 2px; accent-color: var(--accent); }
+.record-btn {
+  font-family: var(--comic); font-size: 0.88rem; font-weight: bold;
+  background: var(--silver); border: 3px outset #e8e8e8; border-radius: 2px;
+  color: #000; cursor: pointer; padding: 0.35rem 0.8rem;
+}
+.record-btn:hover { background: #fff8c0; }
+.record-btn.recording {
+  background: var(--wrong); border-color: #ff7a8a; color: #fff;
+  animation: pulse 0.8s ease-in-out infinite;
+}
+.danger-link { color: var(--wrong); }
+.danger-link:hover { color: #fff; background: var(--wrong); }
+.muted-note { font-size: 0.82rem; color: var(--muted); font-weight: normal; }
+
+/* password change section */
+.pw-section { margin-top: 1.6rem; }
+.section-divider {
+  font-size: 0.8rem; font-weight: bold; text-transform: uppercase; letter-spacing: 0.06em;
+  color: var(--gold); border-top: 2px dotted var(--accent); padding-top: 0.7rem;
+  margin-bottom: 0.9rem;
+}
+#pw-form { display: flex; flex-direction: column; gap: 0.9rem; }
+
+/* audio player in results banner */
+.result-banner .taunt-audio-player { margin-top: 0.6rem; width: 100%; }
+
 /* ============ retro page chrome ============ */
 /* spinning globe pinned to the corner, GeoCities-style */
 body::before {

@@ -405,6 +405,13 @@ async function showResults(matchId) {
     : oc.label;
 
   const bannerImg = oc.label !== "Tied" ? victoryImgHtml(winnerRec) : "";
+  const audioRec = oc.label === "Won" ? myRec : oc.label === "Lost" ? oppRec : null;
+  const audioTauntUrl = audioRec?.taunt_audio
+    ? `${pb.baseUrl}/api/files/users/${audioRec.id}/${audioRec.taunt_audio}`
+    : null;
+  const audioTauntHtml = audioTauntUrl
+    ? `<audio class="taunt-audio-player" controls src="${escHtml(audioTauntUrl)}"></audio>`
+    : "";
   const shownTaunt = oc.label === "Won" ? myTaunt : oc.label === "Lost" ? oppTaunt : null;
   const tauntHtml = shownTaunt
     ? `<div class="taunt-bubble${oc.label === "Won" ? " mine" : " theirs"}">"${escHtml(shownTaunt)}"</div>`
@@ -426,6 +433,7 @@ async function showResults(matchId) {
         <div class="rb-outcome">${headline}</div>
         <div class="rb-score">You ${myScore} — ${oppName} ${oppScore}</div>
         ${tauntHtml}
+        ${audioTauntHtml}
       </div>
       <div class="result-list">${rows}</div>
     </div>
@@ -565,6 +573,17 @@ async function showProfile() {
   const me = pb.authStore.model;
   const profUrl = me.profile_pic ? `${pb.baseUrl}/api/files/users/${me.id}/${me.profile_pic}` : null;
   const vicUrl = me.victory_pic ? `${pb.baseUrl}/api/files/users/${me.id}/${me.victory_pic}` : null;
+  const existingAudioUrl = me.taunt_audio ? `${pb.baseUrl}/api/files/users/${me.id}/${me.taunt_audio}` : null;
+  const canRecord = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+
+  let audioBlob = null;
+  let audioBlobUrl = null;
+  let clearAudio = false;
+  let mediaRecorder = null;
+  let recordStream = null;
+  let chunks = [];
+  let timerInterval = null;
+  let recSeconds = 0;
 
   render(`
     <div class="card profile-card">
@@ -573,6 +592,10 @@ async function showProfile() {
         <span>Profile</span>
       </header>
       <form id="profile-form">
+        <label class="field-label">
+          Display name
+          <input type="text" id="disp-name" placeholder="Your name" maxlength="80" value="${escHtml(me.display_name || "")}">
+        </label>
         <div class="photo-pair">
           <div class="photo-slot">
             <div class="photo-label">Profile photo</div>
@@ -593,11 +616,117 @@ async function showProfile() {
           Victory taunt
           <input type="text" id="taunt-sig" placeholder="What do you say when you win?" maxlength="200" value="${escHtml(me.taunt_signature || "")}">
         </label>
+        <div class="field-label">
+          Victory taunt audio
+          <div id="audio-section"></div>
+        </div>
         <p id="profile-status" class="profile-status"></p>
         <button type="submit" class="play-btn">Save</button>
       </form>
+
+      <div class="pw-section">
+        <div class="section-divider">Change Password</div>
+        <form id="pw-form">
+          <label class="field-label">Current password<input type="password" id="old-pw" autocomplete="current-password"></label>
+          <label class="field-label">New password<input type="password" id="new-pw" autocomplete="new-password"></label>
+          <label class="field-label">Confirm new password<input type="password" id="confirm-pw" autocomplete="new-password"></label>
+          <p id="pw-status" class="profile-status"></p>
+          <button type="submit" class="play-btn">Update password</button>
+        </form>
+      </div>
     </div>
   `);
+
+  function renderAudioSection() {
+    const section = el("audio-section");
+    if (!section) return;
+    let html = "";
+
+    if (audioBlob && audioBlobUrl) {
+      html += `<audio class="taunt-audio-player" controls src="${audioBlobUrl}"></audio>
+               <button type="button" class="link-btn danger-link" id="discard-audio-btn">Discard recording</button>`;
+    } else if (existingAudioUrl && !clearAudio) {
+      html += `<audio class="taunt-audio-player" controls src="${existingAudioUrl}"></audio>
+               <button type="button" class="link-btn danger-link" id="clear-audio-btn">Delete audio</button>`;
+    }
+
+    if (canRecord && !mediaRecorder && !audioBlob) {
+      html += `<button type="button" class="record-btn" id="record-btn">🎤 Record</button>`;
+    } else if (mediaRecorder) {
+      html += `<button type="button" class="record-btn recording" id="stop-btn">⏹ Stop (<span id="rec-timer">0:00</span>)</button>`;
+    } else if (!canRecord) {
+      html += `<span class="muted-note">Audio recording requires HTTPS</span>`;
+    }
+
+    section.innerHTML = html;
+    wireAudioSection();
+  }
+
+  function wireAudioSection() {
+    el("record-btn")?.addEventListener("click", startRecording);
+    el("stop-btn")?.addEventListener("click", stopRecording);
+    el("clear-audio-btn")?.addEventListener("click", () => {
+      clearAudio = true;
+      renderAudioSection();
+    });
+    el("discard-audio-btn")?.addEventListener("click", () => {
+      if (audioBlobUrl) URL.revokeObjectURL(audioBlobUrl);
+      audioBlob = null;
+      audioBlobUrl = null;
+      renderAudioSection();
+    });
+  }
+
+  async function startRecording() {
+    try {
+      recordStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    } catch {
+      el("audio-section").innerHTML = `<span class="muted-note">Microphone access denied.</span>`;
+      return;
+    }
+
+    const mimeType = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4", "audio/ogg"].find(
+      (t) => MediaRecorder.isTypeSupported(t)
+    ) || "";
+
+    chunks = [];
+    mediaRecorder = new MediaRecorder(recordStream, mimeType ? { mimeType } : {});
+    mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
+    mediaRecorder.onstop = () => {
+      const type = mediaRecorder.mimeType || "audio/webm";
+      if (audioBlobUrl) URL.revokeObjectURL(audioBlobUrl);
+      audioBlob = new Blob(chunks, { type });
+      audioBlobUrl = URL.createObjectURL(audioBlob);
+      mediaRecorder = null;
+      recordStream.getTracks().forEach((t) => t.stop());
+      recordStream = null;
+      clearInterval(timerInterval);
+      timerInterval = null;
+      renderAudioSection();
+    };
+
+    recSeconds = 0;
+    mediaRecorder.start();
+    renderAudioSection();
+
+    timerInterval = setInterval(() => {
+      recSeconds++;
+      const timerEl = el("rec-timer");
+      if (timerEl) {
+        const m = Math.floor(recSeconds / 60);
+        const s = recSeconds % 60;
+        timerEl.textContent = `${m}:${String(s).padStart(2, "0")}`;
+      }
+    }, 1000);
+  }
+
+  function stopRecording() {
+    if (mediaRecorder && mediaRecorder.state !== "inactive") {
+      mediaRecorder.stop();
+    }
+  }
+
+  renderAudioSection();
 
   function attachPreview(inputId, previewId) {
     el(inputId).addEventListener("change", (e) => {
@@ -624,7 +753,14 @@ async function showProfile() {
 
   attachPreview("prof-input", "prof-preview");
   attachPreview("vic-input", "vic-preview");
-  el("back-btn").addEventListener("click", showDashboard);
+
+  el("back-btn").addEventListener("click", () => {
+    if (mediaRecorder && mediaRecorder.state !== "inactive") mediaRecorder.stop();
+    if (recordStream) recordStream.getTracks().forEach((t) => t.stop());
+    clearInterval(timerInterval);
+    if (audioBlobUrl) URL.revokeObjectURL(audioBlobUrl);
+    showDashboard();
+  });
 
   el("profile-form").addEventListener("submit", async (ev) => {
     ev.preventDefault();
@@ -640,14 +776,74 @@ async function showProfile() {
     if (profFile) fd.append("profile_pic", profFile);
     if (vicFile) fd.append("victory_pic", vicFile);
     fd.append("taunt_signature", el("taunt-sig").value.trim());
+    fd.append("display_name", el("disp-name").value.trim());
+
+    if (audioBlob) {
+      const type = audioBlob.type || "audio/webm";
+      const ext = type.includes("mp4") ? "mp4" : type.includes("ogg") ? "ogg" : "webm";
+      fd.append("taunt_audio", audioBlob, `taunt.${ext}`);
+    }
 
     try {
+      if (clearAudio && !audioBlob) {
+        await pb.collection("users").update(me.id, { taunt_audio: null });
+      }
       await pb.collection("users").update(me.id, fd);
       await pb.collection("users").authRefresh();
       status.textContent = "Saved!";
       status.style.color = "var(--correct)";
     } catch (err) {
       status.textContent = "Save failed.";
+      status.style.color = "var(--wrong)";
+      console.error(err);
+    }
+    btn.disabled = false;
+  });
+
+  el("pw-form").addEventListener("submit", async (ev) => {
+    ev.preventDefault();
+    const btn = ev.target.querySelector("button[type='submit']");
+    const status = el("pw-status");
+    const oldPw = el("old-pw").value;
+    const newPw = el("new-pw").value;
+    const confirmPw = el("confirm-pw").value;
+
+    if (!oldPw || !newPw || !confirmPw) {
+      status.textContent = "All password fields are required.";
+      status.style.color = "var(--wrong)";
+      return;
+    }
+    if (newPw !== confirmPw) {
+      status.textContent = "New passwords don't match.";
+      status.style.color = "var(--wrong)";
+      return;
+    }
+    if (newPw.length < 8) {
+      status.textContent = "Password must be at least 8 characters.";
+      status.style.color = "var(--wrong)";
+      return;
+    }
+
+    btn.disabled = true;
+    status.textContent = "";
+    status.style.color = "";
+
+    try {
+      const userEmail = pb.authStore.model.email;
+      await pb.collection("users").update(me.id, {
+        oldPassword: oldPw,
+        password: newPw,
+        passwordConfirm: confirmPw,
+      });
+      await pb.collection("users").authWithPassword(userEmail, newPw);
+      status.textContent = "Password updated!";
+      status.style.color = "var(--correct)";
+      el("old-pw").value = "";
+      el("new-pw").value = "";
+      el("confirm-pw").value = "";
+    } catch (err) {
+      const msg = err?.data?.message || err?.message || "Update failed.";
+      status.textContent = msg;
       status.style.color = "var(--wrong)";
       console.error(err);
     }
