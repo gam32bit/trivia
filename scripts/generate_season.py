@@ -21,6 +21,7 @@ Usage:
 
 import argparse
 import json
+import os
 import random
 import sys
 import urllib.error
@@ -116,7 +117,8 @@ def main():
     ap.add_argument("--cycles", type=int, default=4, help="number of round-robin cycles (default 4)")
     ap.add_argument("--pb", default="http://localhost:8090", help="PocketBase base URL")
     ap.add_argument("--admin", default="admin@trivia.local", help="admin email")
-    ap.add_argument("--password", default="Admin1234!", help="admin password")
+    ap.add_argument("--password", default=os.environ.get("PB_ADMIN_PASSWORD", "Admin1234!"),
+                    help="admin password (or set PB_ADMIN_PASSWORD)")
     args = ap.parse_args()
 
     start_date = date.fromisoformat(args.start_date)
