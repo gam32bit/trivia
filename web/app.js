@@ -69,7 +69,7 @@ function outcomeFor(match, meId) {
 function showLogin(errorMsg) {
   render(`
     <div class="card login-card">
-      <h1>Trivia League</h1>
+      <h1>Lose'd League</h1>
       ${errorMsg ? `<p class="error">${errorMsg}</p>` : ""}
       <form id="login-form">
         <label>Email<input type="email" id="email" required autocomplete="username"></label>
