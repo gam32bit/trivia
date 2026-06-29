@@ -20,7 +20,7 @@
 // praise / tongue-in-cheek shame. TODO: set COMMISSIONER once chosen.
 // ====================================================================
 const LEAGUE = "Lose'd League";
-const COMMISSIONER = "The Commissioner"; // TODO: pick a persona name (LL uses "Thorsten")
+const COMMISSIONER = "Thirsten";
 
 // Personalized header blurb for the recipient's own result.
 function praiseBlurb(oppName, myScore, oppScore) {
@@ -230,7 +230,7 @@ function renderTodayBlock(todayMatch, meId, usersById, siteUrl) {
   const aId = todayMatch.getString("player_a"), bId = todayMatch.getString("player_b");
   const oppId = aId === meId ? bId : aId;
   const oppName = esc(usersById[oppId] ? usersById[oppId].getString("display_name") : "your opponent");
-  const inner = `<p style="margin:0 0 14px">Today you face <strong>${oppName}</strong>. Five questions. No second chances. Don&rsquo;t be the cautionary tale in tomorrow&rsquo;s email.</p>
+  const inner = `<p style="margin:0 0 14px">Today you face <strong>${oppName}</strong>. Five questions. Be most utterly Lose&rsquo;d.</p>
     <a href="${esc(siteUrl)}" style="display:inline-block;background:#1a1a2e;color:#fff;text-decoration:none;padding:12px 22px;border-radius:8px;font-weight:700">Play today&rsquo;s match &rarr;</a>`;
   return card(`Today&rsquo;s match`, inner);
 }
@@ -238,16 +238,16 @@ function renderTodayBlock(todayMatch, meId, usersById, siteUrl) {
 // Welcome (day 1): how it works + profile how-to + today's match.
 function renderWelcomeBody(user, todayMatch, meId, usersById, siteUrl) {
   const howItWorks = card(`How ${LEAGUE} works`, `
-    <p style="margin:0 0 10px">Every weekday you get a match against one of the other three players: five trivia questions, answered whenever you like before the day is out. Get more right than your opponent and you win (2 pts). Tie and you each take 1. Lose and you get nothing but this newsletter&rsquo;s pity.</p>
-    <p style="margin:0">Miss a day entirely and it&rsquo;s scored a forfeit, so show up. Standings ride on it, and so does your dignity.</p>`);
+    <p style="margin:0 0 10px">Every weekday you get a match against one of the other three players: five trivia questions, answered whenever you like before the day is out. Get more right than your opponent and you win (2 pts). Tie and you each take 1.</p>
+    <p style="margin:0">Miss a day entirely and it&rsquo;s scored a forfeit.</p>`);
   const profile = card(`Set up your profile`, `
     <p style="margin:0 0 10px">Log in and open your profile to make yourself known:</p>
     <ul style="margin:0 0 10px;padding-left:18px;font-size:14px">
-      <li style="margin:4px 0"><strong>Display name</strong> &mdash; what everyone sees you lose as.</li>
-      <li style="margin:4px 0"><strong>Profile picture</strong> &mdash; a face for the leaderboard.</li>
-      <li style="margin:4px 0"><strong>Victory picture</strong> &mdash; shown to anyone you beat. Choose something insufferable.</li>
-      <li style="margin:4px 0"><strong>Victory taunt</strong> &mdash; a line (and an optional <em>recorded</em> taunt) your victims will be forced to hear.</li>
-      <li style="margin:4px 0"><strong>Change your password</strong> &mdash; please do this. Your default is your <strong>first name in lowercase followed by 1234</strong> (e.g. <code>${esc((user.getString("display_name") || "yourname").split(/\s+/)[0].toLowerCase())}1234</code>).</li>
+      <li style="margin:4px 0"><strong>Display name</strong> &mdash; what your loser ass wants to be called.</li>
+      <li style="margin:4px 0"><strong>Profile picture</strong> &mdash; your loser ass face.</li>
+      <li style="margin:4px 0"><strong>Victory picture</strong> &mdash; what you want other losers to see when you win.</li>
+      <li style="margin:4px 0"><strong>Victory taunt</strong> &mdash; shove it in other losers&rsquo; faces.</li>
+      <li style="margin:4px 0"><strong>Change your password</strong> &mdash; change your fucking password. The default one is your <strong>first name in lowercase followed by 1234</strong> (e.g. <code>${esc((user.getString("display_name") || "yourname").split(/\s+/)[0].toLowerCase())}1234</code>).</li>
     </ul>`);
   return howItWorks + profile + renderTodayBlock(todayMatch, meId, usersById, siteUrl);
 }
