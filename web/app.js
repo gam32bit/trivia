@@ -353,7 +353,6 @@ async function showResults(matchId) {
   const oppName = escHtml(oppRec?.display_name ?? "Opponent");
   const winnerRec = match.winner === match.player_a ? match.expand?.player_a
     : match.winner === match.player_b ? match.expand?.player_b : null;
-  const myTaunt = isA ? match.a_taunt : match.b_taunt;
   const oppTaunt = isA ? match.b_taunt : match.a_taunt;
 
   // Group answers by question, splitting mine vs. opponent's.
@@ -404,23 +403,23 @@ async function showResults(matchId) {
     : oc.label === "Tied" ? "Tie game"
     : oc.label;
 
-  // Victory pic, taunt text, and taunt audio are the loser's burden to witness.
-  // Winners get a form to post a taunt but don't see the display version themselves.
-  const bannerImg = oc.label === "Lost" ? victoryImgHtml(winnerRec) : "";
+  // Victory pic and taunt display for both winner and loser.
+  // Winners see their own victory pic + taunt_signature; losers see the winner's.
+  const bannerImg = oc.label === "Won" ? victoryImgHtml(myRec)
+    : oc.label === "Lost" ? victoryImgHtml(winnerRec)
+    : "";
   const audioTauntUrl = oc.label === "Lost" && oppRec?.taunt_audio
     ? `${pb.baseUrl}/api/files/users/${oppRec.id}/${oppRec.taunt_audio}`
     : null;
   const audioTauntHtml = audioTauntUrl
     ? `<audio class="taunt-audio-player" controls src="${escHtml(audioTauntUrl)}"></audio>`
     : "";
-  const tauntHtml = oc.label === "Lost" && oppTaunt
-    ? `<div class="taunt-bubble theirs">"${escHtml(oppTaunt)}"</div>`
-    : oc.label === "Won"
-      ? `<div class="taunt-form">
-          <input type="text" id="taunt-input" placeholder="Drop your victory taunt…" maxlength="200" value="${escHtml(me.taunt_signature || "")}">
-          <button class="play-btn" id="post-taunt-btn">Post taunt</button>
-         </div>`
-      : "";
+  const winnerTaunt = oc.label === "Won" ? me.taunt_signature
+    : oc.label === "Lost" ? (winnerRec?.taunt_signature || oppTaunt)
+    : "";
+  const tauntHtml = winnerTaunt
+    ? `<div class="taunt-bubble theirs">"${escHtml(winnerTaunt)}"</div>`
+    : "";
 
   render(`
     <div class="card results">
@@ -439,18 +438,6 @@ async function showResults(matchId) {
     </div>
   `);
   el("back-btn").addEventListener("click", showDashboard);
-
-  if (el("post-taunt-btn")) {
-    el("post-taunt-btn").addEventListener("click", async () => {
-      const text = el("taunt-input").value.trim();
-      if (!text) return;
-      el("post-taunt-btn").disabled = true;
-      try {
-        await pb.collection("matches").update(matchId, { [isA ? "a_taunt" : "b_taunt"]: text });
-        showResults(matchId);
-      } catch { el("post-taunt-btn").disabled = false; }
-    });
-  }
 }
 
 async function showLeaderboard(season) {
@@ -584,6 +571,7 @@ async function showProfile() {
   let chunks = [];
   let timerInterval = null;
   let recSeconds = 0;
+  let micDenied = false;
 
   render(`
     <div class="card profile-card">
@@ -650,7 +638,9 @@ async function showProfile() {
                <button type="button" class="link-btn danger-link" id="clear-audio-btn">Delete audio</button>`;
     }
 
-    if (canRecord && !mediaRecorder && !audioBlob) {
+    if (micDenied) {
+      html += `<span class="muted-note">Microphone access denied — allow it in your browser settings, then <button type="button" class="link-btn" id="retry-mic-btn">try again</button>.</span>`;
+    } else if (canRecord && !mediaRecorder && !audioBlob) {
       html += `<button type="button" class="record-btn" id="record-btn">🎤 Record</button>`;
     } else if (mediaRecorder) {
       html += `<button type="button" class="record-btn recording" id="stop-btn">⏹ Stop (<span id="rec-timer">0:00</span>)</button>`;
@@ -665,6 +655,7 @@ async function showProfile() {
   function wireAudioSection() {
     el("record-btn")?.addEventListener("click", startRecording);
     el("stop-btn")?.addEventListener("click", stopRecording);
+    el("retry-mic-btn")?.addEventListener("click", () => { micDenied = false; renderAudioSection(); });
     el("clear-audio-btn")?.addEventListener("click", () => {
       clearAudio = true;
       renderAudioSection();
@@ -681,7 +672,8 @@ async function showProfile() {
     try {
       recordStream = await navigator.mediaDevices.getUserMedia({ audio: true });
     } catch {
-      el("audio-section").innerHTML = `<span class="muted-note">Microphone access denied.</span>`;
+      micDenied = true;
+      renderAudioSection();
       return;
     }
 

@@ -168,6 +168,15 @@ button[type="submit"]:disabled { opacity: 0.6; cursor: default; animation: none;
 }
 .link-btn:hover { color: #fff; background: #ff00d4; }
 
+/* bigger tap target for header back buttons */
+.card header .link-btn {
+  padding: 0.55rem 0.85rem;
+  font-size: 1.05rem;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+}
+
 .error {
   color: #fff;
   background: var(--wrong);
@@ -372,19 +381,6 @@ button[type="submit"]:disabled { opacity: 0.6; cursor: default; animation: none;
 .taunt-bubble.theirs { background: #ffe0e6; border-color: var(--wrong); }
 .taunt-bubble.theirs::before { content: "💀 "; }
 
-.taunt-form { margin-top: 0.85rem; display: flex; flex-direction: column; gap: 0.5rem; }
-.taunt-form::before {
-  content: "📢 SEND THEM A TAUNT:";
-  font-family: var(--comic); font-weight: bold; font-size: 0.85rem;
-  color: var(--gold); letter-spacing: 0.02em;
-}
-.taunt-form input { font-family: var(--comic); }
-.taunt-form .play-btn {
-  font-size: 0.95rem; padding: 0.6rem 1rem;
-  background: #39ff14; border-color: #9dff80; color: #00210a;
-  animation: pulse 1.3s ease-in-out infinite;
-}
-.taunt-form .play-btn::before { content: "📨 "; }
 
 .result-list { display: flex; flex-direction: column; gap: 0.9rem; }
 .result-q {
