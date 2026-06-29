@@ -395,7 +395,7 @@ async function showResults(matchId) {
         <div class="rq-text"><span class="rq-num">Q${i + 1}</span>${qText}</div>
         ${answerRow("You", cell.mine)}
         ${answerRow(oppName, cell.theirs)}
-        ${correct ? `<div class="rq-correct">Answer: <strong>${correct}</strong></div>` : ""}
+        ${correct ? `<div class="rq-correct">Answer: <strong>${correct}</strong>${correct === "True" && q?.source_url ? ` <a class="source-link" href="${escHtml(q.source_url)}" target="_blank" rel="noopener noreferrer">source</a>` : ""}</div>` : ""}
       </div>`;
   }).join("");
 

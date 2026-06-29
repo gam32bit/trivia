@@ -49,9 +49,15 @@ def init_db(path):
             category       TEXT NOT NULL,
             text           TEXT NOT NULL,
             correct_answer TEXT NOT NULL,
-            used_in_round  INTEGER
+            used_in_round  INTEGER,
+            source_url     TEXT
         )
     """)
+    # Add source_url to existing databases that pre-date this column.
+    try:
+        conn.execute("ALTER TABLE questions ADD COLUMN source_url TEXT")
+    except sqlite3.OperationalError:
+        pass  # column already exists
     conn.commit()
     return conn
 
@@ -60,7 +66,7 @@ def fetch_fact():
     req = urllib.request.Request(FACTS_URL, headers={"User-Agent": "trivia-league/1.0"})
     with urllib.request.urlopen(req, timeout=15) as r:
         data = json.loads(r.read().decode())
-    return data["text"]
+    return data["text"], data.get("source_url")
 
 
 def generate_false_variant(client, fact_text):
@@ -81,10 +87,10 @@ def generate_false_variant(client, fact_text):
     return text
 
 
-def upsert_question(conn, source_id, text, correct_answer):
+def upsert_question(conn, source_id, text, correct_answer, source_url=None):
     cur = conn.execute(
-        "INSERT OR IGNORE INTO questions (source_id, category, text, correct_answer) VALUES (?, ?, ?, ?)",
-        (source_id, "Useless Facts", text, correct_answer),
+        "INSERT OR IGNORE INTO questions (source_id, category, text, correct_answer, source_url) VALUES (?, ?, ?, ?, ?)",
+        (source_id, "Useless Facts", text, correct_answer, source_url),
     )
     conn.commit()
     return cur.rowcount
@@ -110,7 +116,7 @@ def main():
 
     for i in range(args.count):
         try:
-            fact = fetch_fact()
+            fact, fact_source_url = fetch_fact()
         except Exception as e:
             print(f"  [{i}] fetch error: {e}", file=sys.stderr)
             errors += 1
@@ -120,7 +126,7 @@ def main():
         if i % 2 == 0:
             # Group A: store the fact as-is (True)
             sid = source_id_true(fact)
-            added = upsert_question(conn, sid, fact, "True")
+            added = upsert_question(conn, sid, fact, "True", fact_source_url)
             if added:
                 added_true += 1
                 print(f"  [{i}] TRUE : {fact[:80]}")

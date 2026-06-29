@@ -52,7 +52,7 @@ def fetch_existing_ids(pb_url, token):
 
 def create_question(pb_url, token, row, existing_ids):
     """Insert one question if not already present. Returns True if inserted."""
-    source_id, category, text, correct_answer, used_in_round = row
+    source_id, category, text, correct_answer, used_in_round, source_url = row
     if source_id in existing_ids:
         return False
     body = {
@@ -63,6 +63,8 @@ def create_question(pb_url, token, row, existing_ids):
     }
     if used_in_round is not None:
         body["used_in_round"] = used_in_round
+    if source_url:
+        body["source_url"] = source_url
 
     url = f"{pb_url}/api/collections/questions/records"
     data = json.dumps(body).encode()
@@ -98,7 +100,7 @@ def main():
 
     conn = sqlite3.connect(args.db)
     rows = conn.execute(
-        "SELECT source_id, category, text, correct_answer, used_in_round FROM questions"
+        "SELECT source_id, category, text, correct_answer, used_in_round, source_url FROM questions"
     ).fetchall()
     conn.close()
     print(f"trivia.db: {len(rows)} questions total")
