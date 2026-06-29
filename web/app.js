@@ -404,17 +404,17 @@ async function showResults(matchId) {
     : oc.label === "Tied" ? "Tie game"
     : oc.label;
 
-  const bannerImg = oc.label !== "Tied" ? victoryImgHtml(winnerRec) : "";
-  const audioRec = oc.label === "Won" ? myRec : oc.label === "Lost" ? oppRec : null;
-  const audioTauntUrl = audioRec?.taunt_audio
-    ? `${pb.baseUrl}/api/files/users/${audioRec.id}/${audioRec.taunt_audio}`
+  // Victory pic, taunt text, and taunt audio are the loser's burden to witness.
+  // Winners get a form to post a taunt but don't see the display version themselves.
+  const bannerImg = oc.label === "Lost" ? victoryImgHtml(winnerRec) : "";
+  const audioTauntUrl = oc.label === "Lost" && oppRec?.taunt_audio
+    ? `${pb.baseUrl}/api/files/users/${oppRec.id}/${oppRec.taunt_audio}`
     : null;
   const audioTauntHtml = audioTauntUrl
     ? `<audio class="taunt-audio-player" controls src="${escHtml(audioTauntUrl)}"></audio>`
     : "";
-  const shownTaunt = oc.label === "Won" ? myTaunt : oc.label === "Lost" ? oppTaunt : null;
-  const tauntHtml = shownTaunt
-    ? `<div class="taunt-bubble${oc.label === "Won" ? " mine" : " theirs"}">"${escHtml(shownTaunt)}"</div>`
+  const tauntHtml = oc.label === "Lost" && oppTaunt
+    ? `<div class="taunt-bubble theirs">"${escHtml(oppTaunt)}"</div>`
     : oc.label === "Won"
       ? `<div class="taunt-form">
           <input type="text" id="taunt-input" placeholder="Drop your victory taunt…" maxlength="200" value="${escHtml(me.taunt_signature || "")}">
