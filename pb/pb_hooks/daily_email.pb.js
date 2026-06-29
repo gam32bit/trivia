@@ -90,11 +90,17 @@ routerAdd("POST", "/api/admin/preview-daily-email", (e) => {
 // --- 3. Fire on server startup so a fresh deploy sends today's email immediately
 //        rather than waiting for the 8am ET cron. email_log idempotency means
 //        this is safe across restarts. ---
-$app.onServe().add(function(e) {
-  const email = require(`${__hooks}/lib/email.js`);
-  const r = email.runDaily($app, email.todayET(), { siteUrl: PROD_URL });
-  if (r.skipped) { console.log("startup-email: skipped (" + r.reason + ")"); }
-  else { console.log("startup-email: " + r.type + " sent to " + r.sent + "/" + r.recipients
-    + (r.errors && r.errors.length ? " (errors: " + r.errors.join("; ") + ")" : "")); }
+$app.onServe().bindFunc(function(e) {
+  // Best-effort: a failure here must never stop the web server from serving,
+  // so swallow any error and always call e.next().
+  try {
+    const email = require(`${__hooks}/lib/email.js`);
+    const r = email.runDaily($app, email.todayET(), { siteUrl: PROD_URL });
+    if (r.skipped) { console.log("startup-email: skipped (" + r.reason + ")"); }
+    else { console.log("startup-email: " + r.type + " sent to " + r.sent + "/" + r.recipients
+      + (r.errors && r.errors.length ? " (errors: " + r.errors.join("; ") + ")" : "")); }
+  } catch (err) {
+    console.log("startup-email: error " + String(err));
+  }
   e.next();
 });
