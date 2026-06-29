@@ -5,3 +5,5 @@ devlog/
 .serena/
 .env
 .claude/settings.local.json
+*.bak
+__pycache__/
