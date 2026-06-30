@@ -24,16 +24,14 @@ const COMMISSIONER = "Thirsten";
 
 // Personalized header blurb for the recipient's own result.
 function praiseBlurb(oppName, myScore, oppScore) {
-  return `<p style="margin:0 0 12px">Stop everything. <strong>You won.</strong> You looked ${oppName} dead in the eye and went ${myScore}&ndash;${oppScore}. Historians will struggle to capture it. We are, frankly, in awe of you. Bask. You&rsquo;ve earned it.</p>`;
+  return `<p style="margin:0 0 12px">Wow. Guess you&rsquo;re not as much of a loser as I thought you were. You took a big ol&rsquo; dump on ${oppName}, and I think they liked it? Doubt you&rsquo;ll keep it up tho.</p>`;
 }
 function shameBlurb(oppName, myScore, oppScore) {
-  return `<p style="margin:0 0 12px">Oof. ${oppName} beat you ${oppScore}&ndash;${myScore}, and honestly it wasn&rsquo;t close enough to pretend otherwise. We&rsquo;d offer comfort, but you have a league to embarrass yourself in tomorrow. Chin up. Sort of.</p>`;
+  return `<p style="margin:0 0 12px">Saw that one coming LOSER! ${oppName} beat your ass!!!! You fucking dumb piece of shit&hellip;</p>`;
 }
 function tieBlurb(oppName, myScore, oppScore) {
-  return `<p style="margin:0 0 12px">You and ${oppName} tied ${myScore}&ndash;${oppScore}. Nobody wins, nobody loses, everybody&rsquo;s vaguely unsatisfied. Very on-brand for this league.</p>`;
+  return `<p style="margin:0 0 12px">Congrats you got the most boring result - you and ${oppName} tied. Boring. BORING BORING BORING BORING BORING BORING BORING BORING BORING BORING</p>`;
 }
-// Shown to the loser when the winner hasn't set a victory pic / taunt yet.
-const NO_GLOAT = "Your conqueror hasn&rsquo;t even bothered to set up a victory taunt yet. Somehow that&rsquo;s more insulting.";
 
 // ---------- date (ET, Intl-free) ----------
 // goja (PB's JS engine) has NO Intl, so we can't use Intl.DateTimeFormat for the
@@ -199,8 +197,6 @@ function renderResultBlock($app, myMatch, meId, usersById, siteUrl) {
       }
       gloat += `</div>`;
       inner += gloat;
-    } else {
-      inner += `<p style="margin:0;font-size:13px;color:#888">${NO_GLOAT}</p>`;
     }
   }
   return card(`Your result`, inner);
@@ -230,7 +226,7 @@ function renderTodayBlock(todayMatch, meId, usersById, siteUrl) {
   const aId = todayMatch.getString("player_a"), bId = todayMatch.getString("player_b");
   const oppId = aId === meId ? bId : aId;
   const oppName = esc(usersById[oppId] ? usersById[oppId].getString("display_name") : "your opponent");
-  const inner = `<p style="margin:0 0 14px">Today you face <strong>${oppName}</strong>. Five questions. Be most utterly Lose&rsquo;d.</p>
+  const inner = `<p style="margin:0 0 14px">Today you face <strong>${oppName}</strong>. Don&rsquo;t think you&rsquo;re going to win, because you&rsquo;re a LOSER but we&rsquo;ll see.</p>
     <a href="${esc(siteUrl)}" style="display:inline-block;background:#1a1a2e;color:#fff;text-decoration:none;padding:12px 22px;border-radius:8px;font-weight:700">Play today&rsquo;s match &rarr;</a>`;
   return card(`Today&rsquo;s match`, inner);
 }

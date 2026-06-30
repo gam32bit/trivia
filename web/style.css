@@ -175,6 +175,7 @@ button[type="submit"]:disabled { opacity: 0.6; cursor: default; animation: none;
   min-height: 44px;
   display: inline-flex;
   align-items: center;
+  white-space: nowrap; /* keep "Sign out" on one line — never split mid-button */
 }
 
 .error {
@@ -199,9 +200,11 @@ button[type="submit"]:disabled { opacity: 0.6; cursor: default; animation: none;
   display: flex;
   justify-content: space-between;
   align-items: center;
+  flex-wrap: wrap; /* drop nav below greeting on narrow phones instead of cramming */
+  gap: 0.5rem;
 }
 .greeting { display: flex; align-items: center; gap: 0.5rem; font-weight: bold; color: var(--gold); }
-.nav-actions { display: flex; gap: 0.85rem; align-items: center; }
+.nav-actions { display: flex; gap: 0.85rem; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
 
 .match-summary { text-align: center; margin-bottom: 1.2rem; }
 .vs-line { display: flex; align-items: center; justify-content: center; gap: 1.1rem; margin-bottom: 0.5rem; }
