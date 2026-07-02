@@ -7,7 +7,11 @@
 //
 // PB JSVM isolated-scope gotcha (see project memory): handler bodies CANNOT see
 // file top-level vars, and a top-level require() result is invisible inside a
-// handler. So each handler require()s the shared renderer as its FIRST line.
+// handler. So each handler require()s the shared renderer as its FIRST line,
+// AND redeclares PROD_URL locally rather than closing over the file-level
+// const below (that const is for reference/readability only — cronAdd bodies
+// silently threw "ReferenceError: PROD_URL is not defined" in production for
+// two straight days, 2026-06-30 and 2026-07-01, until this fix).
 // All rendering/data-gathering lives in lib/email.js (pure, takes $app); this
 // file owns scheduling, idempotency (email_log) and actually sending.
 
@@ -16,6 +20,7 @@ const PROD_URL = "https://trivia.jwcaterine.com";
 // --- 1. daily cron: 8:00am ET (0 12 UTC during EDT; after the 05:05 UTC
 //        forfeit sweep so "yesterday's results" are already finalized). ---
 cronAdd("daily-email", "0 12 * * *", () => {
+  const PROD_URL = "https://trivia.jwcaterine.com";
   const email = require(`${__hooks}/lib/email.js`);
   const r = email.runDaily($app, email.todayET(), { siteUrl: PROD_URL });
   if (r.skipped) { console.log("daily-email: skipped (" + r.reason + ")"); return; }
@@ -29,6 +34,7 @@ cronAdd("daily-email", "0 12 * * *", () => {
 // mode=send-admin emails the whole rendered set to the authed superuser only.
 routerAdd("POST", "/api/admin/preview-daily-email", (e) => {
  try {
+  const PROD_URL = "https://trivia.jwcaterine.com";
   const email = require(`${__hooks}/lib/email.js`);
   const ri = e.requestInfo();
   const param = (k) => (ri.query && ri.query[k]) || (ri.body && ri.body[k]) || "";
@@ -94,6 +100,7 @@ $app.onServe().bindFunc(function(e) {
   // Best-effort: a failure here must never stop the web server from serving,
   // so swallow any error and always call e.next().
   try {
+    const PROD_URL = "https://trivia.jwcaterine.com";
     const email = require(`${__hooks}/lib/email.js`);
     const r = email.runDaily($app, email.todayET(), { siteUrl: PROD_URL });
     if (r.skipped) { console.log("startup-email: skipped (" + r.reason + ")"); }
